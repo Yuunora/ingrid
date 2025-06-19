@@ -10,7 +10,7 @@ public class App {
     private static Logger logger = LogManager.getLogger(App.class);
 
     public static void main(String[] args) {
-
+        logger.info("Starting app...");
         SpringApplication.run(App.class, args);
     }
 }

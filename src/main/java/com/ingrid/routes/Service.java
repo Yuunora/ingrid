@@ -1,9 +1,8 @@
 package com.ingrid.routes;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,47 +13,45 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.ingrid.osmr.Client;
 import com.ingrid.osmr.OsmrException;
+import com.ingrid.osmr.OsmrService;
 import com.ingrid.osmr.RouteInfo;
 
 @RestController
 public class Service {
 
     @Autowired
-    private final Client osmrClient;
+    private final OsmrService osmrService;
 
     private static Logger logger = LogManager.getLogger(Service.class);
 
-    public Service(Client osmrClient) {
-        this.osmrClient = osmrClient;
+    public Service(OsmrService osmrService) {
+        this.osmrService = osmrService;
     }
 
     @GetMapping("/routes")
     public Routes getRoutes(@RequestParam(name = "src") String src,
-            @RequestParam(name = "dst") List<String> dists) {
+            @RequestParam(name = "dst") Set<String> dists) {
 
         if (!isCoordinate(src)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid parameter: src");
         }
 
-        var routes = new ArrayList<RouteInfo>();
+        var routes = new TreeSet<RouteInfo>(
+                Comparator.comparing((RouteInfo r) -> r.duration).thenComparing(r -> r.distance));
         for (String dist : dists) {
             if (!isCoordinate(dist)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid parameter: dst");
             }
             try {
-                var route = osmrClient.findRoute(src, dist);
+                final var route = osmrService.findRoute(src, dist);
                 routes.add(route);
             } catch (OsmrException e) {
-                logger.error(e.getMessage());
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             }
         }
 
-        // Sort the results by duration then distance
-        Collections.sort(routes, Comparator.comparing((RouteInfo r) -> r.duration).thenComparing(r -> r.distance));
-        return new Routes(src, routes);
+        return new Routes(src, routes.stream().toList());
     }
 
     private Boolean isCoordinate(String src) {
@@ -66,7 +63,7 @@ public class Service {
             Float.parseFloat(values[0]);
             Float.parseFloat(values[1]);
         } catch (NumberFormatException e) {
-            logger.error(String.format("Incorrect format for %s", src));
+            logger.error("Incorrect format for {}", src);
             return false;
         }
 
